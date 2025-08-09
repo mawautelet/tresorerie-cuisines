@@ -545,6 +545,56 @@ container.innerHTML = analysis;
             box-shadow: 0 5px 15px rgba(23,162,184,0.3);
         }
 
+        .minimize-btn {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 0.8em;
+            color: #6c757d;
+            transition: all 0.2s ease;
+        }
+
+        .minimize-btn:hover {
+            background: #e9ecef;
+            color: #495057;
+            transform: scale(1.1);
+        }
+
+        .project-status-summary {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+
+        .status-item {
+            padding: 4px 8px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.8);
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .project-details-container {
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .project-minimized .project-details-container {
+            max-height: 0;
+            opacity: 0;
+        }
+
+        .project-minimized .project-header {
+            border-bottom: none;
+        }
+
         .editing-highlight {
             border: 2px solid #17a2b8;
             box-shadow: 0 0 10px rgba(23,162,184,0.3);
@@ -773,9 +823,11 @@ container.innerHTML = analysis;
         let expenses = [];
         let isEditingProject = false;
         let editingProjectId = null;
+        let minimizedProjects = new Set();
 
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
+            loadMinimizedState();
             loadData();
             updateDashboard();
         });
@@ -996,18 +1048,37 @@ container.innerHTML = analysis;
                     projectCard.classList.add('editing-highlight');
                 }
                 
+                // Ajouter une classe si le projet est minimisé
+                if (minimizedProjects.has(project.id)) {
+                    projectCard.classList.add('project-minimized');
+                }
+                
                 const totalReceived = project.payments.filter(p => p.received).reduce((sum, p) => sum + p.amount, 0);
                 const totalPending = project.payments.filter(p => !p.received).reduce((sum, p) => sum + p.amount, 0);
 
                 projectCard.innerHTML = `
                     <div class="project-header">
-                        <div class="project-name">${project.name}</div>
-                        <div class="project-amount">€${project.amount.toLocaleString()}</div>
+                        <div style="display: flex; align-items: center; gap: 15px; flex: 1;">
+                            <button onclick="toggleProject(${project.id})" class="minimize-btn" title="Minimiser/Maximiser">
+                                <span id="toggle-icon-${project.id}">▼</span>
+                            </button>
+                            <div class="project-name">${project.name}</div>
+                            <div class="project-amount">€${project.amount.toLocaleString()}</div>
+                            <div class="project-status-summary" id="status-${project.id}">
+                                <span class="status-item positive">€${totalReceived.toLocaleString()}</span>
+                                <span class="status-item warning">€${totalPending.toLocaleString()}</span>
+                                <span class="status-item ${(project.amount - (project.suppliers || []).reduce((sum, s) => sum + s.amount, 0)) >= 0 ? 'positive' : 'negative'}">
+                                    ${((project.amount - (project.suppliers || []).reduce((sum, s) => sum + s.amount, 0)) / project.amount * 100).toFixed(1)}%
+                                </span>
+                            </div>
+                        </div>
                         <div style="display: flex; gap: 10px;">
                             <button class="btn" onclick="editProject(${project.id})" style="padding: 8px 15px; font-size: 0.9em; background: #17a2b8;">✏️ Modifier</button>
                             <button class="btn btn-danger" onclick="deleteProject(${project.id})" style="padding: 8px 15px; font-size: 0.9em;">🗑️ Supprimer</button>
                         </div>
                     </div>
+                    
+                    <div class="project-details-container" id="details-${project.id}">
                     <div class="project-details">
                         <div class="detail-item">
                             <div class="detail-label">Confirmation</div>
@@ -1125,6 +1196,19 @@ container.innerHTML = analysis;
                 `;
                 
                 container.appendChild(projectCard);
+                
+                // Appliquer l'état minimisé après l'ajout au DOM
+                if (minimizedProjects.has(project.id)) {
+                    setTimeout(() => {
+                        const detailsContainer = document.getElementById(`details-${project.id}`);
+                        const toggleIcon = document.getElementById(`toggle-icon-${project.id}`);
+                        if (detailsContainer && toggleIcon) {
+                            detailsContainer.style.maxHeight = '0';
+                            detailsContainer.style.opacity = '0';
+                            toggleIcon.textContent = '▶';
+                        }
+                    }, 10);
+                }
             });
         }
 
@@ -1409,6 +1493,48 @@ container.innerHTML = analysis;
             generateMonthlyFlows();
             drawCashFlowChart();
             drawTreasuryEvolutionChart();
+        }
+
+        // Basculer l'état minimisé/maximisé d'un projet
+        function toggleProject(projectId) {
+            const detailsContainer = document.getElementById(`details-${projectId}`);
+            const toggleIcon = document.getElementById(`toggle-icon-${projectId}`);
+            
+            if (minimizedProjects.has(projectId)) {
+                // Maximiser le projet
+                minimizedProjects.delete(projectId);
+                detailsContainer.style.maxHeight = 'none';
+                detailsContainer.style.opacity = '1';
+                toggleIcon.textContent = '▼';
+                
+                // Supprimer la classe CSS après l'animation
+                setTimeout(() => {
+                    detailsContainer.parentElement.classList.remove('project-minimized');
+                }, 50);
+            } else {
+                // Minimiser le projet
+                minimizedProjects.add(projectId);
+                detailsContainer.style.maxHeight = '0';
+                detailsContainer.style.opacity = '0';
+                toggleIcon.textContent = '▶';
+                detailsContainer.parentElement.classList.add('project-minimized');
+            }
+            
+            // Sauvegarder l'état
+            saveMinimizedState();
+        }
+
+        // Sauvegarder l'état des projets minimisés
+        function saveMinimizedState() {
+            localStorage.setItem('minimizedProjects', JSON.stringify([...minimizedProjects]));
+        }
+
+        // Charger l'état des projets minimisés
+        function loadMinimizedState() {
+            const saved = localStorage.getItem('minimizedProjects');
+            if (saved) {
+                minimizedProjects = new Set(JSON.parse(saved));
+            }
         }
 
         // Générer les flux mensuels
