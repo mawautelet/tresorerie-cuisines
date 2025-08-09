@@ -442,6 +442,46 @@
                 <button class="btn" onclick="addProject()">Ajouter le Projet</button>
             </div>
 
+            <div class="form-section" id="supplierSection" style="display: none;">
+                <h3>🚚 Gestion Fournisseurs</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Type de Prestation</label>
+                        <select id="supplierType">
+                            <option value="fourniture">Fourniture</option>
+                            <option value="montage">Montage</option>
+                            <option value="transport">Transport</option>
+                            <option value="autre">Autre</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Nom du Fournisseur</label>
+                        <input type="text" id="supplierName" placeholder="Ex: Cuisines Plus">
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <input type="text" id="supplierDescription" placeholder="Ex: Meubles cuisine chêne">
+                    </div>
+                    <div class="form-group">
+                        <label>Montant (€)</label>
+                        <input type="number" id="supplierAmount" placeholder="5000">
+                    </div>
+                    <div class="form-group">
+                        <label>Date d'Échéance</label>
+                        <input type="date" id="supplierDueDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Statut</label>
+                        <select id="supplierStatus">
+                            <option value="pending">À payer</option>
+                            <option value="paid">Payé</option>
+                            <option value="overdue">En retard</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn" onclick="addSupplierExpense()">Ajouter Dépense Fournisseur</button>
+            </div>
+
             <div class="projects-list" id="projectsList">
                 <!-- Les projets seront affichés ici -->
             </div>
@@ -539,7 +579,8 @@
                 validationDate,
                 deliveryDate,
                 assemblyDate,
-                payments: calculatePayments(amount, confirmDate, validationDate, deliveryDate, assemblyDate)
+                payments: calculatePayments(amount, confirmDate, validationDate, deliveryDate, assemblyDate),
+                suppliers: []
             };
 
             projects.push(project);
@@ -646,9 +687,18 @@
                             <div class="detail-label">En attente</div>
                             <div class="detail-value warning">€${totalPending.toLocaleString()}</div>
                         </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Coût Fournisseurs</div>
+                            <div class="detail-value negative">€${(project.suppliers || []).reduce((sum, s) => sum + s.amount, 0).toLocaleString()}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Marge Brute</div>
+                            <div class="detail-value ${(project.amount - (project.suppliers || []).reduce((sum, s) => sum + s.amount, 0)) >= 0 ? 'positive' : 'negative'}">€${(project.amount - (project.suppliers || []).reduce((sum, s) => sum + s.amount, 0)).toLocaleString()}</div>
+                        </div>
                     </div>
+                    
                     <div class="payments-section">
-                        <h4>Échéancier de paiement</h4>
+                        <h4>📥 Échéancier Client</h4>
                         ${project.payments.map(payment => `
                             <div class="payment-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background: ${payment.received ? '#d4edda' : '#fff3cd'}; border-radius: 5px;">
                                 <div>
@@ -662,6 +712,40 @@
                                 </label>
                             </div>
                         `).join('')}
+                    </div>
+                    
+                    <div class="suppliers-section" style="margin-top: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h4>🚚 Dépenses Fournisseurs</h4>
+                            <button class="btn" onclick="showSupplierForm(${project.id})" style="padding: 8px 15px; font-size: 0.9em;">+ Ajouter</button>
+                        </div>
+                        ${(project.suppliers || []).map(supplier => `
+                            <div class="supplier-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background: ${supplier.status === 'paid' ? '#d4edda' : supplier.status === 'overdue' ? '#f8d7da' : '#fff3cd'}; border-radius: 5px; border-left: 4px solid ${supplier.status === 'paid' ? '#28a745' : supplier.status === 'overdue' ? '#dc3545' : '#ffc107'};">
+                                <div style="flex-grow: 1;">
+                                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 5px;">
+                                        <span style="background: #007bff; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em;">
+                                            ${supplier.type === 'fourniture' ? '📦' : supplier.type === 'montage' ? '🔧' : supplier.type === 'transport' ? '🚚' : '📋'} 
+                                            ${supplier.type.charAt(0).toUpperCase() + supplier.type.slice(1)}
+                                        </span>
+                                        <strong>${supplier.name}</strong>
+                                    </div>
+                                    <div style="color: #6c757d; font-size: 0.9em;">${supplier.description}</div>
+                                    <div style="margin-top: 5px;">
+                                        <span style="font-weight: 600;">€${supplier.amount.toLocaleString()}</span> - 
+                                        <span style="color: #6c757d;">Échéance: ${formatDate(supplier.dueDate)}</span>
+                                    </div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <select onchange="updateSupplierStatus(${project.id}, ${supplier.id}, this.value)" style="padding: 5px; border-radius: 5px; border: 1px solid #ddd;">
+                                        <option value="pending" ${supplier.status === 'pending' ? 'selected' : ''}>À payer</option>
+                                        <option value="paid" ${supplier.status === 'paid' ? 'selected' : ''}>Payé</option>
+                                        <option value="overdue" ${supplier.status === 'overdue' ? 'selected' : ''}>En retard</option>
+                                    </select>
+                                    <button onclick="deleteSupplier(${project.id}, ${supplier.id})" style="background: #dc3545; color: white; border: none; padding: 5px 8px; border-radius: 3px; cursor: pointer;">🗑️</button>
+                                </div>
+                            </div>
+                        `).join('')}
+                        ${(project.suppliers || []).length === 0 ? '<div style="text-align: center; color: #6c757d; font-style: italic; padding: 20px;">Aucune dépense fournisseur</div>' : ''}
                     </div>
                 `;
                 
@@ -683,7 +767,98 @@
             }
         }
 
-        // Supprimer un projet
+        // Afficher/masquer le formulaire fournisseur
+        function showSupplierForm(projectId) {
+            const section = document.getElementById('supplierSection');
+            section.style.display = section.style.display === 'none' ? 'block' : 'none';
+            
+            // Stocker l'ID du projet pour lequel on ajoute un fournisseur
+            window.currentProjectId = projectId;
+            
+            // Réinitialiser le formulaire
+            document.getElementById('supplierType').value = 'fourniture';
+            document.getElementById('supplierName').value = '';
+            document.getElementById('supplierDescription').value = '';
+            document.getElementById('supplierAmount').value = '';
+            document.getElementById('supplierDueDate').value = '';
+            document.getElementById('supplierStatus').value = 'pending';
+        }
+
+        // Ajouter une dépense fournisseur
+        function addSupplierExpense() {
+            if (!window.currentProjectId) {
+                alert('Erreur: aucun projet sélectionné');
+                return;
+            }
+
+            const type = document.getElementById('supplierType').value;
+            const name = document.getElementById('supplierName').value;
+            const description = document.getElementById('supplierDescription').value;
+            const amount = parseFloat(document.getElementById('supplierAmount').value);
+            const dueDate = document.getElementById('supplierDueDate').value;
+            const status = document.getElementById('supplierStatus').value;
+
+            if (!name || !amount || !dueDate) {
+                alert('Veuillez remplir tous les champs obligatoires');
+                return;
+            }
+
+            const project = projects.find(p => p.id === window.currentProjectId);
+            if (!project) {
+                alert('Projet introuvable');
+                return;
+            }
+
+            if (!project.suppliers) {
+                project.suppliers = [];
+            }
+
+            const supplier = {
+                id: Date.now(),
+                type,
+                name,
+                description,
+                amount,
+                dueDate,
+                status
+            };
+
+            project.suppliers.push(supplier);
+            saveData();
+            displayProjects();
+            updateDashboard();
+
+            // Masquer le formulaire et le réinitialiser
+            document.getElementById('supplierSection').style.display = 'none';
+            window.currentProjectId = null;
+        }
+
+        // Mettre à jour le statut d'un fournisseur
+        function updateSupplierStatus(projectId, supplierId, newStatus) {
+            const project = projects.find(p => p.id === projectId);
+            if (project && project.suppliers) {
+                const supplier = project.suppliers.find(s => s.id === supplierId);
+                if (supplier) {
+                    supplier.status = newStatus;
+                    saveData();
+                    displayProjects();
+                    updateDashboard();
+                }
+            }
+        }
+
+        // Supprimer un fournisseur
+        function deleteSupplier(projectId, supplierId) {
+            if (confirm('Êtes-vous sûr de vouloir supprimer cette dépense fournisseur ?')) {
+                const project = projects.find(p => p.id === projectId);
+                if (project && project.suppliers) {
+                    project.suppliers = project.suppliers.filter(s => s.id !== supplierId);
+                    saveData();
+                    displayProjects();
+                    updateDashboard();
+                }
+            }
+        }
         function deleteProject(id) {
             if (confirm('Êtes-vous sûr de vouloir supprimer ce projet ?')) {
                 projects = projects.filter(p => p.id !== id);
@@ -754,9 +929,15 @@
                 sum + project.payments.filter(p => p.received).reduce((pSum, p) => pSum + p.amount, 0), 0);
             const totalPending = projects.reduce((sum, project) => 
                 sum + project.payments.filter(p => !p.received).reduce((pSum, p) => pSum + p.amount, 0), 0);
+            
+            // Calculer les coûts fournisseurs
+            const totalSupplierCosts = projects.reduce((sum, project) => 
+                sum + (project.suppliers || []).reduce((sSum, s) => sSum + s.amount, 0), 0);
+            const unpaidSuppliers = projects.reduce((sum, project) => 
+                sum + (project.suppliers || []).filter(s => s.status !== 'paid').reduce((sSum, s) => sSum + s.amount, 0), 0);
 
             document.getElementById('totalRevenue').textContent = `€${totalRevenue.toLocaleString()}`;
-            document.getElementById('currentCash').textContent = `€${totalReceived.toLocaleString()}`;
+            document.getElementById('currentCash').textContent = `€${(totalReceived - totalSupplierCosts + unpaidSuppliers).toLocaleString()}`;
             document.getElementById('pendingPayments').textContent = `€${totalPending.toLocaleString()}`;
             document.getElementById('activeProjects').textContent = projects.length;
 
@@ -790,10 +971,23 @@
                 });
             });
 
+            // Soustraire les paiements fournisseurs
+            projects.forEach(project => {
+                (project.suppliers || []).forEach(supplier => {
+                    if (supplier.status === 'paid') {
+                        const date = new Date(supplier.dueDate);
+                        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                        if (monthlyData[key]) {
+                            monthlyData[key].expenses += supplier.amount;
+                        }
+                    }
+                });
+            });
+
             // Ajouter les frais fixes
             const monthlyExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
             Object.values(monthlyData).forEach(month => {
-                month.expenses = monthlyExpenses;
+                month.expenses += monthlyExpenses;
                 month.net = month.income - month.expenses;
             });
 
@@ -983,15 +1177,31 @@
                 });
             });
 
-            // Frais fixes
-            const monthlyExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+            // Calculer les frais fixes mensuels
+            const monthlyFixedExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+            
+            // Ajouter les paiements fournisseurs prévus
+            projects.forEach(project => {
+                (project.suppliers || []).forEach(supplier => {
+                    const date = new Date(supplier.dueDate);
+                    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    if (monthlyData[key]) {
+                        monthlyData[key].expenses += supplier.amount;
+                    }
+                });
+            });
+            
             Object.values(monthlyData).forEach(month => {
-                month.expenses = monthlyExpenses;
+                month.expenses += monthlyFixedExpenses;
             });
 
             // Calculer la trésorerie cumulative prévisionnelle
             let currentCash = projects.reduce((sum, project) => 
                 sum + project.payments.filter(p => p.received).reduce((pSum, p) => pSum + p.amount, 0), 0);
+            
+            // Soustraire les paiements fournisseurs déjà effectués
+            currentCash -= projects.reduce((sum, project) => 
+                sum + (project.suppliers || []).filter(s => s.status === 'paid').reduce((sSum, s) => sSum + s.amount, 0), 0);
             
             let minCash = currentCash;
             let maxCash = currentCash;
