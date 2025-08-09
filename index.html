@@ -1,4 +1,203 @@
-<!DOCTYPE html>
+container.innerHTML = analysis;
+        }
+
+        // Dessiner le graphique d'évolution de la trésorerie
+        function drawTreasuryEvolutionChart() {
+            const canvas = document.getElementById('treasuryEvolutionChart');
+            const ctx = canvas.getContext('2d');
+            
+            // Calculer l'évolution de la trésorerie sur les 12 derniers mois
+            const monthlyData = {};
+            const today = new Date();
+            
+            for (let i = -12; i <= 0; i++) {
+                const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+                const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                monthlyData[key] = { income: 0, expenses: 0 };
+            }
+
+            // Calculer les revenus encaissés
+            projects.forEach(project => {
+                project.payments.forEach(payment => {
+                    if (payment.received) {
+                        const date = new Date(payment.date);
+                        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                        if (monthlyData[key] !== undefined) {
+                            monthlyData[key].income += payment.amount;
+                        }
+                    }
+                });
+            });
+
+            // Calculer les dépenses fournisseurs payées
+            projects.forEach(project => {
+                (project.suppliers || []).forEach(supplier => {
+                    (supplier.payments || []).forEach(payment => {
+                        const date = new Date(payment.date);
+                        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                        if (monthlyData[key] !== undefined) {
+                            monthlyData[key].expenses += payment.amount;
+                        }
+                    });
+                });
+            });
+
+            // Ajouter les frais fixes
+            const monthlyFixedExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+            Object.values(monthlyData).forEach(month => {
+                month.expenses += monthlyFixedExpenses;
+            });
+
+            // Calculer la trésorerie cumulative
+            let cumulativeCash = 0;
+            const chartData = [];
+            
+            Object.entries(monthlyData).forEach(([key, data]) => {
+                cumulativeCash += (data.income - data.expenses);
+                chartData.push({
+                    month: key,
+                    cash: cumulativeCash,
+                    flow: data.income - data.expenses
+                });
+            });
+
+            // Dessiner le graphique
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            
+            const padding = 50;
+            const chartWidth = canvas.width - 2 * padding;
+            const chartHeight = canvas.height - 2 * padding;
+            
+            // Trouver les valeurs min/max
+            const maxCash = Math.max(...chartData.map(d => d.cash), 0);
+            const minCash = Math.min(...chartData.map(d => d.cash), 0);
+            const range = maxCash - minCash || 1;
+            
+            // Effacer le canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Dessiner la grille
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            
+            // Lignes horizontales
+            for (let i = 0; i <= 5; i++) {
+                const y = padding + (chartHeight * i / 5);
+                ctx.beginPath();
+                ctx.moveTo(padding, y);
+                ctx.lineTo(padding + chartWidth, y);
+                ctx.stroke();
+            }
+            
+            // Ligne zéro
+            if (minCash < 0 && maxCash > 0) {
+                const zeroY = padding + chartHeight - ((0 - minCash) / range) * chartHeight;
+                ctx.strokeStyle = '#ff4444';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(padding, zeroY);
+                ctx.lineTo(padding + chartWidth, zeroY);
+                ctx.stroke();
+            }
+            
+            // Dessiner les barres de flux
+            ctx.fillStyle = '#f0f0f0';
+            chartData.forEach((point, index) => {
+                const x = padding + (index / (chartData.length - 1)) * chartWidth;
+                const barWidth = chartWidth / chartData.length * 0.6;
+                
+                if (point.flow !== 0) {
+                    const barHeight = Math.abs(point.flow) / (Math.max(...chartData.map(d => Math.abs(d.flow))) || 1) * (chartHeight * 0.3);
+                    const zeroY = padding + chartHeight - ((0 - minCash) / range) * chartHeight;
+                    
+                    ctx.fillStyle = point.flow > 0 ? 'rgba(40, 167, 69, 0.3)' : 'rgba(220, 53, 69, 0.3)';
+                    
+                    if (point.flow > 0) {
+                        ctx.fillRect(x - barWidth/2, zeroY - barHeight, barWidth, barHeight);
+                    } else {
+                        ctx.fillRect(x - barWidth/2, zeroY, barWidth, barHeight);
+                    }
+                }
+            });
+            
+            // Dessiner la courbe de trésorerie cumulative
+            if (chartData.length > 1) {
+                ctx.strokeStyle = '#007bff';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                
+                chartData.forEach((point, index) => {
+                    const x = padding + (index / (chartData.length - 1)) * chartWidth;
+                    const y = padding + chartHeight - ((point.cash - minCash) / range) * chartHeight;
+                    
+                    if (index === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                });
+                
+                ctx.stroke();
+                
+                // Dessiner les points
+                ctx.fillStyle = '#007bff';
+                chartData.forEach((point, index) => {
+                    const x = padding + (index / (chartData.length - 1)) * chartWidth;
+                    const y = padding + chartHeight - ((point.cash - minCash) / range) * chartHeight;
+                    
+                    ctx.beginPath();
+                    ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    // Afficher la valeur au survol (simulation)
+                    if (index === chartData.length - 1) {
+                        ctx.fillStyle = '#333';
+                        ctx.font = '12px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(`€${Math.round(point.cash).toLocaleString()}`, x, y - 10);
+                        ctx.fillStyle = '#007bff';
+                    }
+                });
+            }
+            
+            // Ajouter les étiquettes
+            ctx.fillStyle = '#333';
+            ctx.font = '11px Arial';
+            ctx.textAlign = 'center';
+            
+            // Étiquettes des mois
+            chartData.forEach((point, index) => {
+                if (index % 2 === 0) { // Afficher un mois sur deux pour éviter l'encombrement
+                    const x = padding + (index / (chartData.length - 1)) * chartWidth;
+                    const [year, month] = point.month.split('-');
+                    const monthName = new Date(year, month - 1).toLocaleDateString('fr-FR', { month: 'short' });
+                    ctx.fillText(monthName, x, canvas.height - 10);
+                }
+            });
+            
+            // Étiquettes des montants
+            ctx.textAlign = 'right';
+            for (let i = 0; i <= 5; i++) {
+                const value = minCash + (range * i / 5);
+                const y = padding + chartHeight - (chartHeight * i / 5) + 5;
+                ctx.fillText(`€${Math.round(value).toLocaleString()}`, padding - 10, y);
+            }
+            
+            // Légende
+            ctx.textAlign = 'left';
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#007bff';
+            ctx.fillText('— Trésorerie cumulative', padding, 20);
+            ctx.fillStyle = 'rgba(40, 167, 69, 0.8)';
+            ctx.fillRect(padding + 170, 12, 15, 10);
+            ctx.fillStyle = '#333';
+            ctx.fillText('Flux positifs', padding + 190, 20);
+            ctx.fillStyle = 'rgba(220, 53, 69, 0.8)';
+            ctx.fillRect(padding + 270, 12, 15, 10);
+            ctx.fillStyle = '#333';
+            ctx.fillText('Flux négatifs', padding + 290, 20);
+        }<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -401,6 +600,13 @@
                 </div>
                 
                 <div class="chart-container">
+                    <div class="chart-title">Évolution de la Trésorerie</div>
+                    <div class="cash-flow-chart">
+                        <canvas id="treasuryEvolutionChart" width="100%" height="400"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
                     <div class="chart-title">Trésorerie Mensuelle</div>
                     <div class="monthly-flows" id="monthlyFlows">
                         <!-- Les données mensuelles seront générées ici -->
@@ -480,6 +686,26 @@
                     </div>
                 </div>
                 <button class="btn" onclick="addSupplierExpense()">Ajouter Dépense Fournisseur</button>
+            </div>
+
+            <div class="form-section" id="paymentSection" style="display: none;">
+                <h3>💰 Paiement Fournisseur</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Montant du Paiement (€)</label>
+                        <input type="number" id="paymentAmount" placeholder="1500">
+                    </div>
+                    <div class="form-group">
+                        <label>Date de Paiement</label>
+                        <input type="date" id="paymentDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Commentaire (optionnel)</label>
+                        <input type="text" id="paymentComment" placeholder="Acompte 50%">
+                    </div>
+                </div>
+                <button class="btn" onclick="addPayment()">Enregistrer Paiement</button>
+                <button class="btn" onclick="hidePaymentForm()" style="background: #6c757d; margin-left: 10px;">Annuler</button>
             </div>
 
             <div class="projects-list" id="projectsList">
@@ -693,7 +919,10 @@
                         </div>
                         <div class="detail-item">
                             <div class="detail-label">Marge Brute</div>
-                            <div class="detail-value ${(project.amount - (project.suppliers || []).reduce((sum, s) => sum + s.amount, 0)) >= 0 ? 'positive' : 'negative'}">€${(project.amount - (project.suppliers || []).reduce((sum, s) => sum + s.amount, 0)).toLocaleString()}</div>
+                            <div class="detail-value ${(project.amount - (project.suppliers || []).reduce((sum, s) => sum + s.amount, 0)) >= 0 ? 'positive' : 'negative'}">
+                                €${(project.amount - (project.suppliers || []).reduce((sum, s) => sum + s.amount, 0)).toLocaleString()}
+                                <br><span style="font-size: 0.8em;">(${((project.amount - (project.suppliers || []).reduce((sum, s) => sum + s.amount, 0)) / project.amount * 100).toFixed(1)}%)</span>
+                            </div>
                         </div>
                     </div>
                     
@@ -719,32 +948,58 @@
                             <h4>🚚 Dépenses Fournisseurs</h4>
                             <button class="btn" onclick="showSupplierForm(${project.id})" style="padding: 8px 15px; font-size: 0.9em;">+ Ajouter</button>
                         </div>
-                        ${(project.suppliers || []).map(supplier => `
-                            <div class="supplier-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background: ${supplier.status === 'paid' ? '#d4edda' : supplier.status === 'overdue' ? '#f8d7da' : '#fff3cd'}; border-radius: 5px; border-left: 4px solid ${supplier.status === 'paid' ? '#28a745' : supplier.status === 'overdue' ? '#dc3545' : '#ffc107'};">
+                        ${(project.suppliers || []).map(supplier => {
+                            const totalPaid = (supplier.payments || []).reduce((sum, p) => sum + p.amount, 0);
+                            const remaining = supplier.amount - totalPaid;
+                            return `
+                            <div class="supplier-item" style="display: flex; justify-content: space-between; align-items: center; padding: 15px; margin: 8px 0; background: ${totalPaid >= supplier.amount ? '#d4edda' : remaining < supplier.amount * 0.1 ? '#fff3cd' : '#f8f9fa'}; border-radius: 8px; border-left: 4px solid ${totalPaid >= supplier.amount ? '#28a745' : remaining < supplier.amount * 0.1 ? '#ffc107' : '#6c757d'};">
                                 <div style="flex-grow: 1;">
-                                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 5px;">
-                                        <span style="background: #007bff; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em;">
+                                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
+                                        <span style="background: #007bff; color: white; padding: 3px 10px; border-radius: 15px; font-size: 0.8em; font-weight: 500;">
                                             ${supplier.type === 'fourniture' ? '📦' : supplier.type === 'montage' ? '🔧' : supplier.type === 'transport' ? '🚚' : '📋'} 
                                             ${supplier.type.charAt(0).toUpperCase() + supplier.type.slice(1)}
                                         </span>
-                                        <strong>${supplier.name}</strong>
+                                        <strong style="color: #2c3e50;">${supplier.name}</strong>
                                     </div>
-                                    <div style="color: #6c757d; font-size: 0.9em;">${supplier.description}</div>
-                                    <div style="margin-top: 5px;">
-                                        <span style="font-weight: 600;">€${supplier.amount.toLocaleString()}</span> - 
-                                        <span style="color: #6c757d;">Échéance: ${formatDate(supplier.dueDate)}</span>
+                                    <div style="color: #6c757d; font-size: 0.9em; margin-bottom: 8px;">${supplier.description}</div>
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 0.9em;">
+                                        <div>
+                                            <span style="color: #6c757d;">Total:</span>
+                                            <span style="font-weight: 600; color: #2c3e50;">€${supplier.amount.toLocaleString()}</span>
+                                        </div>
+                                        <div>
+                                            <span style="color: #6c757d;">Payé:</span>
+                                            <span style="font-weight: 600; color: #28a745;">€${totalPaid.toLocaleString()}</span>
+                                        </div>
+                                        <div>
+                                            <span style="color: #6c757d;">Reste:</span>
+                                            <span style="font-weight: 600; color: ${remaining > 0 ? '#dc3545' : '#28a745'};">€${remaining.toLocaleString()}</span>
+                                        </div>
+                                        <div>
+                                            <span style="color: #6c757d;">Échéance:</span>
+                                            <span style="font-weight: 500;">${formatDate(supplier.dueDate)}</span>
+                                        </div>
                                     </div>
+                                    ${(supplier.payments || []).length > 0 ? `
+                                        <div style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 5px;">
+                                            <div style="font-size: 0.8em; color: #6c757d; margin-bottom: 5px;">Historique des paiements:</div>
+                                            ${supplier.payments.map(payment => `
+                                                <div style="display: flex; justify-content: space-between; font-size: 0.8em; margin-bottom: 2px;">
+                                                    <span>${formatDate(payment.date)}</span>
+                                                    <span style="font-weight: 600;">€${payment.amount.toLocaleString()}</span>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    ` : ''}
                                 </div>
-                                <div style="display: flex; align-items: center; gap: 10px;">
-                                    <select onchange="updateSupplierStatus(${project.id}, ${supplier.id}, this.value)" style="padding: 5px; border-radius: 5px; border: 1px solid #ddd;">
-                                        <option value="pending" ${supplier.status === 'pending' ? 'selected' : ''}>À payer</option>
-                                        <option value="paid" ${supplier.status === 'paid' ? 'selected' : ''}>Payé</option>
-                                        <option value="overdue" ${supplier.status === 'overdue' ? 'selected' : ''}>En retard</option>
-                                    </select>
-                                    <button onclick="deleteSupplier(${project.id}, ${supplier.id})" style="background: #dc3545; color: white; border: none; padding: 5px 8px; border-radius: 3px; cursor: pointer;">🗑️</button>
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 120px;">
+                                    <button onclick="showPaymentForm(${project.id}, ${supplier.id})" style="background: #007bff; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 0.8em; width: 100%;">
+                                        💰 Payer
+                                    </button>
+                                    <button onclick="deleteSupplier(${project.id}, ${supplier.id})" style="background: #dc3545; color: white; border: none; padding: 6px 8px; border-radius: 3px; cursor: pointer; font-size: 0.8em;">🗑️</button>
                                 </div>
                             </div>
-                        `).join('')}
+                        `}).join('')}
                         ${(project.suppliers || []).length === 0 ? '<div style="text-align: center; color: #6c757d; font-style: italic; padding: 20px;">Aucune dépense fournisseur</div>' : ''}
                     </div>
                 `;
@@ -820,7 +1075,8 @@
                 description,
                 amount,
                 dueDate,
-                status
+                status: 'pending',
+                payments: []
             };
 
             project.suppliers.push(supplier);
@@ -833,7 +1089,89 @@
             window.currentProjectId = null;
         }
 
-        // Mettre à jour le statut d'un fournisseur
+        // Afficher le formulaire de paiement
+        function showPaymentForm(projectId, supplierId) {
+            const project = projects.find(p => p.id === projectId);
+            const supplier = project?.suppliers?.find(s => s.id === supplierId);
+            
+            if (!supplier) {
+                alert('Fournisseur introuvable');
+                return;
+            }
+
+            const totalPaid = (supplier.payments || []).reduce((sum, p) => sum + p.amount, 0);
+            const remaining = supplier.amount - totalPaid;
+
+            document.getElementById('paymentSection').style.display = 'block';
+            document.getElementById('paymentAmount').value = remaining > 0 ? remaining : '';
+            document.getElementById('paymentDate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('paymentComment').value = '';
+            
+            // Stocker les IDs pour le paiement
+            window.currentPaymentProjectId = projectId;
+            window.currentPaymentSupplierId = supplierId;
+            
+            // Scroll vers le formulaire
+            document.getElementById('paymentSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Masquer le formulaire de paiement
+        function hidePaymentForm() {
+            document.getElementById('paymentSection').style.display = 'none';
+            window.currentPaymentProjectId = null;
+            window.currentPaymentSupplierId = null;
+        }
+
+        // Ajouter un paiement
+        function addPayment() {
+            if (!window.currentPaymentProjectId || !window.currentPaymentSupplierId) {
+                alert('Erreur: aucun fournisseur sélectionné');
+                return;
+            }
+
+            const amount = parseFloat(document.getElementById('paymentAmount').value);
+            const date = document.getElementById('paymentDate').value;
+            const comment = document.getElementById('paymentComment').value;
+
+            if (!amount || !date || amount <= 0) {
+                alert('Veuillez renseigner un montant valide et une date');
+                return;
+            }
+
+            const project = projects.find(p => p.id === window.currentPaymentProjectId);
+            const supplier = project?.suppliers?.find(s => s.id === window.currentPaymentSupplierId);
+
+            if (!supplier) {
+                alert('Fournisseur introuvable');
+                return;
+            }
+
+            const totalPaid = (supplier.payments || []).reduce((sum, p) => sum + p.amount, 0);
+            
+            if (totalPaid + amount > supplier.amount) {
+                if (!confirm(`Attention: ce paiement (€${amount.toLocaleString()}) dépasse le montant dû (reste €${(supplier.amount - totalPaid).toLocaleString()}). Continuer ?`)) {
+                    return;
+                }
+            }
+
+            if (!supplier.payments) {
+                supplier.payments = [];
+            }
+
+            const payment = {
+                id: Date.now(),
+                amount,
+                date,
+                comment: comment || 'Paiement'
+            };
+
+            supplier.payments.push(payment);
+            
+            saveData();
+            displayProjects();
+            updateDashboard();
+            hidePaymentForm();
+        }
         function updateSupplierStatus(projectId, supplierId, newStatus) {
             const project = projects.find(p => p.id === projectId);
             if (project && project.suppliers) {
@@ -846,6 +1184,9 @@
                 }
             }
         }
+
+        // Supprimer les fonctions obsolètes de gestion de statut
+        // updateSupplierStatus et deleteSupplier sont remplacées par les nouvelles fonctions
 
         // Supprimer un fournisseur
         function deleteSupplier(projectId, supplierId) {
@@ -930,19 +1271,19 @@
             const totalPending = projects.reduce((sum, project) => 
                 sum + project.payments.filter(p => !p.received).reduce((pSum, p) => pSum + p.amount, 0), 0);
             
-            // Calculer les coûts fournisseurs
-            const totalSupplierCosts = projects.reduce((sum, project) => 
-                sum + (project.suppliers || []).reduce((sSum, s) => sSum + s.amount, 0), 0);
-            const unpaidSuppliers = projects.reduce((sum, project) => 
-                sum + (project.suppliers || []).filter(s => s.status !== 'paid').reduce((sSum, s) => sSum + s.amount, 0), 0);
+            // Calculer les paiements fournisseurs effectués
+            const totalSupplierPaid = projects.reduce((sum, project) => 
+                sum + (project.suppliers || []).reduce((sSum, supplier) => 
+                    sSum + (supplier.payments || []).reduce((pSum, payment) => pSum + payment.amount, 0), 0), 0);
 
             document.getElementById('totalRevenue').textContent = `€${totalRevenue.toLocaleString()}`;
-            document.getElementById('currentCash').textContent = `€${(totalReceived - totalSupplierCosts + unpaidSuppliers).toLocaleString()}`;
+            document.getElementById('currentCash').textContent = `€${(totalReceived - totalSupplierPaid).toLocaleString()}`;
             document.getElementById('pendingPayments').textContent = `€${totalPending.toLocaleString()}`;
             document.getElementById('activeProjects').textContent = projects.length;
 
             generateMonthlyFlows();
             drawCashFlowChart();
+            drawTreasuryEvolutionChart();
         }
 
         // Générer les flux mensuels
@@ -974,13 +1315,13 @@
             // Soustraire les paiements fournisseurs
             projects.forEach(project => {
                 (project.suppliers || []).forEach(supplier => {
-                    if (supplier.status === 'paid') {
-                        const date = new Date(supplier.dueDate);
+                    (supplier.payments || []).forEach(payment => {
+                        const date = new Date(payment.date);
                         const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                         if (monthlyData[key]) {
-                            monthlyData[key].expenses += supplier.amount;
+                            monthlyData[key].expenses += payment.amount;
                         }
-                    }
+                    });
                 });
             });
 
@@ -1183,10 +1524,15 @@
             // Ajouter les paiements fournisseurs prévus
             projects.forEach(project => {
                 (project.suppliers || []).forEach(supplier => {
-                    const date = new Date(supplier.dueDate);
-                    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                    if (monthlyData[key]) {
-                        monthlyData[key].expenses += supplier.amount;
+                    const totalPaid = (supplier.payments || []).reduce((sum, p) => sum + p.amount, 0);
+                    const remaining = supplier.amount - totalPaid;
+                    
+                    if (remaining > 0) {
+                        const date = new Date(supplier.dueDate);
+                        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                        if (monthlyData[key]) {
+                            monthlyData[key].expenses += remaining;
+                        }
                     }
                 });
             });
@@ -1201,7 +1547,8 @@
             
             // Soustraire les paiements fournisseurs déjà effectués
             currentCash -= projects.reduce((sum, project) => 
-                sum + (project.suppliers || []).filter(s => s.status === 'paid').reduce((sSum, s) => sSum + s.amount, 0), 0);
+                sum + (project.suppliers || []).reduce((sSum, supplier) => 
+                    sSum + (supplier.payments || []).reduce((pSum, payment) => pSum + payment.amount, 0), 0), 0);
             
             let minCash = currentCash;
             let maxCash = currentCash;
