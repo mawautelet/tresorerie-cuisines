@@ -1767,12 +1767,18 @@ container.innerHTML = analysis;
                         monthlyData[key].income += payment.amount;
                     }
                 });
+            // Calculer les revenus prévus (TOUS les paiements clients, pas seulement reçus)
+            projects.forEach(project => {
+                project.payments.forEach(payment => {
+                    const date = new Date(payment.date);
+                    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    if (monthlyData[key]) {
+                        monthlyData[key].income += payment.amount;
+                    }
+                });
             });
 
-            // Calculer les frais fixes mensuels
-            const monthlyFixedExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-            
-            // Ajouter les paiements fournisseurs prévus
+            // Calculer les dépenses prévues (soldes fournisseurs + frais fixes)
             projects.forEach(project => {
                 (project.suppliers || []).forEach(supplier => {
                     const totalPaid = (supplier.payments || []).reduce((sum, p) => sum + p.amount, 0);
@@ -1787,36 +1793,31 @@ container.innerHTML = analysis;
                     }
                 });
             });
-            
+
+            const monthlyFixedExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
             Object.values(monthlyData).forEach(month => {
                 month.expenses += monthlyFixedExpenses;
             });
 
             // Calculer la trésorerie cumulative prévisionnelle
-            let currentCash = projects.reduce((sum, project) => 
-                sum + project.payments.filter(p => p.received).reduce((pSum, p) => pSum + p.amount, 0), 0);
+            let cumulativeCash = startingCash;
             
-            // Soustraire les paiements fournisseurs déjà effectués
-            currentCash -= projects.reduce((sum, project) => 
-                sum + (project.suppliers || []).reduce((sSum, supplier) => 
-                    sSum + (supplier.payments || []).reduce((pSum, payment) => pSum + payment.amount, 0), 0), 0);
-            
-            let minCash = currentCash;
-            let maxCash = currentCash;
+            let minCash = cumulativeCash;
+            let maxCash = cumulativeCash;
             let negativeMonths = 0;
             
             const forecast = [];
             
             Object.entries(monthlyData).forEach(([key, data]) => {
-                currentCash += (data.income - data.expenses);
-                minCash = Math.min(minCash, currentCash);
-                maxCash = Math.max(maxCash, currentCash);
+                cumulativeCash += (data.income - data.expenses);
+                minCash = Math.min(minCash, cumulativeCash);
+                maxCash = Math.max(maxCash, cumulativeCash);
                 
-                if (currentCash < 0) negativeMonths++;
+                if (cumulativeCash < 0) negativeMonths++;
                 
                 forecast.push({
                     month: key,
-                    cash: currentCash,
+                    cash: cumulativeCash,
                     flow: data.income - data.expenses
                 });
             });
