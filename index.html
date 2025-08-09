@@ -537,6 +537,19 @@ container.innerHTML = analysis;
             font-weight: 600;
         }
 
+        .btn-edit {
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+        }
+
+        .btn-edit:hover {
+            box-shadow: 0 5px 15px rgba(23,162,184,0.3);
+        }
+
+        .editing-highlight {
+            border: 2px solid #17a2b8;
+            box-shadow: 0 0 10px rgba(23,162,184,0.3);
+        }
+
         @media (max-width: 768px) {
             .tabs {
                 flex-direction: column;
@@ -618,7 +631,7 @@ container.innerHTML = analysis;
         <!-- Projects Tab -->
         <div id="projects" class="tab-content">
             <div class="form-section">
-                <h3>➕ Nouveau Projet</h3>
+                <h3 id="projectFormTitle">➕ Nouveau Projet</h3>
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Nom du Projet</label>
@@ -645,7 +658,10 @@ container.innerHTML = analysis;
                         <input type="date" id="assemblyDate">
                     </div>
                 </div>
-                <button class="btn" onclick="addProject()">Ajouter le Projet</button>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn" id="projectSubmitBtn" onclick="addProject()">Ajouter le Projet</button>
+                    <button class="btn" id="projectCancelBtn" onclick="cancelEditProject()" style="background: #6c757d; display: none;">Annuler</button>
+                </div>
             </div>
 
             <div class="form-section" id="supplierSection" style="display: none;">
@@ -755,6 +771,8 @@ container.innerHTML = analysis;
         // Variables globales
         let projects = [];
         let expenses = [];
+        let isEditingProject = false;
+        let editingProjectId = null;
 
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
@@ -797,30 +815,124 @@ container.innerHTML = analysis;
                 return;
             }
 
-            const project = {
-                id: Date.now(),
-                name,
-                amount,
-                confirmDate,
-                validationDate,
-                deliveryDate,
-                assemblyDate,
-                payments: calculatePayments(amount, confirmDate, validationDate, deliveryDate, assemblyDate),
-                suppliers: []
-            };
+            if (isEditingProject) {
+                // Mode modification
+                updateProject(editingProjectId, name, amount, confirmDate, validationDate, deliveryDate, assemblyDate);
+            } else {
+                // Mode création
+                const project = {
+                    id: Date.now(),
+                    name,
+                    amount,
+                    confirmDate,
+                    validationDate,
+                    deliveryDate,
+                    assemblyDate,
+                    payments: calculatePayments(amount, confirmDate, validationDate, deliveryDate, assemblyDate),
+                    suppliers: []
+                };
 
-            projects.push(project);
+                projects.push(project);
+            }
+
             saveData();
             displayProjects();
             updateDashboard();
+            resetProjectForm();
+        }
 
-            // Réinitialiser le formulaire
+        // Modifier un projet existant
+        function editProject(projectId) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) {
+                alert('Projet introuvable');
+                return;
+            }
+
+            // Remplir le formulaire avec les données existantes
+            document.getElementById('projectName').value = project.name;
+            document.getElementById('projectAmount').value = project.amount;
+            document.getElementById('confirmDate').value = project.confirmDate || '';
+            document.getElementById('validationDate').value = project.validationDate || '';
+            document.getElementById('deliveryDate').value = project.deliveryDate || '';
+            document.getElementById('assemblyDate').value = project.assemblyDate || '';
+
+            // Passer en mode édition
+            isEditingProject = true;
+            editingProjectId = projectId;
+
+            // Modifier l'interface
+            document.getElementById('projectFormTitle').textContent = '✏️ Modifier le Projet';
+            document.getElementById('projectSubmitBtn').textContent = 'Sauvegarder les Modifications';
+            document.getElementById('projectSubmitBtn').onclick = addProject; // Même fonction, comportement différent
+            document.getElementById('projectCancelBtn').style.display = 'inline-block';
+
+            // Scroll vers le formulaire
+            document.getElementById('projectFormTitle').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Mettre à jour un projet existant
+        function updateProject(projectId, name, amount, confirmDate, validationDate, deliveryDate, assemblyDate) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) {
+                alert('Projet introuvable');
+                return;
+            }
+
+            // Sauvegarder les anciens paiements
+            const oldPayments = [...project.payments];
+
+            // Mettre à jour les informations de base
+            project.name = name;
+            project.amount = amount;
+            project.confirmDate = confirmDate;
+            project.validationDate = validationDate;
+            project.deliveryDate = deliveryDate;
+            project.assemblyDate = assemblyDate;
+
+            // Recalculer les paiements
+            const newPayments = calculatePayments(amount, confirmDate, validationDate, deliveryDate, assemblyDate);
+
+            // Préserver les statuts de paiement existants
+            newPayments.forEach(newPayment => {
+                const oldPayment = oldPayments.find(old => 
+                    old.description === newPayment.description || 
+                    (old.date === newPayment.date && Math.abs(old.amount - newPayment.amount) < 0.01)
+                );
+                if (oldPayment) {
+                    newPayment.received = oldPayment.received;
+                }
+            });
+
+            project.payments = newPayments;
+
+            alert('Projet modifié avec succès !');
+        }
+
+        // Annuler la modification
+        function cancelEditProject() {
+            resetProjectForm();
+        }
+
+        // Réinitialiser le formulaire
+        function resetProjectForm() {
+            // Réinitialiser les champs
             document.getElementById('projectName').value = '';
             document.getElementById('projectAmount').value = '';
             document.getElementById('confirmDate').value = '';
             document.getElementById('validationDate').value = '';
             document.getElementById('deliveryDate').value = '';
             document.getElementById('assemblyDate').value = '';
+
+            // Réinitialiser le mode
+            isEditingProject = false;
+            editingProjectId = null;
+
+            // Réinitialiser l'interface
+            document.getElementById('projectFormTitle').textContent = '➕ Nouveau Projet';
+            document.getElementById('projectSubmitBtn').textContent = 'Ajouter le Projet';
+            document.getElementById('projectSubmitBtn').onclick = addProject;
+            document.getElementById('projectCancelBtn').style.display = 'none';
         }
 
         // Calculer les échéances de paiement
@@ -879,6 +991,11 @@ container.innerHTML = analysis;
                 const projectCard = document.createElement('div');
                 projectCard.className = 'project-card';
                 
+                // Ajouter une classe spéciale si le projet est en cours d'édition
+                if (isEditingProject && editingProjectId === project.id) {
+                    projectCard.classList.add('editing-highlight');
+                }
+                
                 const totalReceived = project.payments.filter(p => p.received).reduce((sum, p) => sum + p.amount, 0);
                 const totalPending = project.payments.filter(p => !p.received).reduce((sum, p) => sum + p.amount, 0);
 
@@ -886,7 +1003,10 @@ container.innerHTML = analysis;
                     <div class="project-header">
                         <div class="project-name">${project.name}</div>
                         <div class="project-amount">€${project.amount.toLocaleString()}</div>
-                        <button class="btn btn-danger" onclick="deleteProject(${project.id})">🗑️</button>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn" onclick="editProject(${project.id})" style="padding: 8px 15px; font-size: 0.9em; background: #17a2b8;">✏️ Modifier</button>
+                            <button class="btn btn-danger" onclick="deleteProject(${project.id})" style="padding: 8px 15px; font-size: 0.9em;">🗑️ Supprimer</button>
+                        </div>
                     </div>
                     <div class="project-details">
                         <div class="detail-item">
@@ -1087,6 +1207,11 @@ container.innerHTML = analysis;
             // Masquer le formulaire et le réinitialiser
             document.getElementById('supplierSection').style.display = 'none';
             window.currentProjectId = null;
+            
+            // Réinitialiser aussi le formulaire de projet si on était en mode édition
+            if (isEditingProject) {
+                resetProjectForm();
+            }
         }
 
         // Afficher le formulaire de paiement
